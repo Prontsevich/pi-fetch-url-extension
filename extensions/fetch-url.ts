@@ -21,10 +21,13 @@ export default function (pi: ExtensionAPI) {
       format: Type.Optional(StringEnum(["auto", "text", "json", "raw"] as const, {
         description: "Response format: auto=detect, text=strip HTML tags, json=parse JSON, raw=unchanged"
       })),
+      extract: Type.Optional(StringEnum(["metadata", "links", "headings", "all", "none"] as const, {
+        description: "What to extract from HTML: metadata=title+description+og-tags, links=all links, headings=h1-h6 structure, all=everything, none=only content"
+      })),
     }),
 
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
-      const { url, format = "auto" } = params;
+      const { url, format = "auto", extract = "all" } = params;
 
       // Validate URL
       if (!url.startsWith("http://") && !url.startsWith("https://")) {
@@ -110,8 +113,49 @@ export default function (pi: ExtensionAPI) {
           truncated = true;
         }
 
+        // Extract additional data from HTML pages
+        let metadata, headings, links;
+        if (displayFormat === "text" || displayFormat === "raw") {
+          if (extract === "metadata" || extract === "all") {
+            metadata = extractMetadata(rawText);
+          }
+          if (extract === "headings" || extract === "all") {
+            headings = extractHeadings(rawText);
+          }
+          if (extract === "links" || extract === "all") {
+            links = extractLinks(rawText);
+          }
+        }
+
+        // Build response text
+        let responseText = `${getStatusEmoji(response.status)} ${url}${truncated ? " ✂️" : ""}`;
+        
+        if (metadata) {
+          responseText += `\n\n📄 ${metadata.title || "No title"}`;
+          if (metadata.description) responseText += `\n📝 ${metadata.description}`;
+          if (metadata.language) responseText += `\n🌐 ${metadata.language}`;
+        }
+        
+        if (headings && headings.length > 0) {
+          responseText += `\n\n📑 Structure:\n`;
+          headings.forEach(h => {
+            const indent = "  ".repeat(h.level - 1);
+            responseText += `${indent}├─ H${h.level}: ${h.text}\n`;
+          });
+        }
+        
+        if (links && links.length > 0) {
+          responseText += `\n\n🔗 Links (${links.length}):\n`;
+          links.slice(0, 20).forEach(l => {
+            responseText += `├─ [${l.text || "link"}] ${l.url}\n`;
+          });
+          if (links.length > 20) responseText += `... and ${links.length - 20} more\n`;
+        }
+        
+        responseText += `\n\n📖 Content:\n${content}`;
+
         return {
-          content: [{ type: "text", text: `${getStatusEmoji(response.status)} ${url}${truncated ? " ✂️" : ""}` }],
+          content: [{ type: "text", text: responseText }],
           details: {
             url,
             statusCode: response.status,
@@ -119,7 +163,10 @@ export default function (pi: ExtensionAPI) {
             contentType,
             length: content.length,
             truncated,
-            fullContent: content, // Full content always available for processing
+            metadata,
+            headings,
+            links,
+            fullContent: content,
           },
         };
 
@@ -139,6 +186,120 @@ function getStatusEmoji(statusCode: number): string {
   if (statusCode >= 400 && statusCode < 500) return "⚠️";
   if (statusCode >= 500) return "❌";
   return "ℹ️";
+}
+
+// Extract metadata from HTML
+function extractMetadata(html: string): {
+  title?: string;
+  description?: string;
+  language?: string;
+  canonical?: string;
+  ogTags?: Record<string, string>;
+} {
+  const result: {
+    title?: string;
+    description?: string;
+    language?: string;
+    canonical?: string;
+    ogTags?: Record<string, string>;
+  } = {};
+
+  // Title
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (titleMatch) {
+    result.title = titleMatch[1].trim().replace(/\s+/g, " ");
+  }
+
+  // Meta description
+  const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
+                    html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i);
+  if (descMatch) {
+    result.description = descMatch[1].trim();
+  }
+
+  // Language
+  const langMatch = html.match(/<html[^>]*lang=["']([^"']*)["']/i);
+  if (langMatch) {
+    result.language = langMatch[1];
+  }
+
+  // Canonical URL
+  const canonicalMatch = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']*)["'][^>]*>/i) ||
+                         html.match(/<link[^>]*href=["']([^"']*)["'][^>]*rel=["']canonical["'][^>]*>/i);
+  if (canonicalMatch) {
+    result.canonical = canonicalMatch[1];
+  }
+
+  // Open Graph tags
+  const ogTags: Record<string, string> = {};
+  const ogMatches = html.matchAll(/<meta[^>]*property=["']og:([^"']*)["'][^>]*content=["']([^"']*)["'][^>]*>/gi);
+  for (const match of ogMatches) {
+    ogTags[match[1]] = match[2];
+  }
+  if (Object.keys(ogTags).length > 0) {
+    result.ogTags = ogTags;
+  }
+
+  return result;
+}
+
+// Extract headings from HTML
+function extractHeadings(html: string): Array<{ level: number; text: string }> {
+  const headings: Array<{ level: number; text: string }> = [];
+  
+  const headingRegex = /<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi;
+  let match;
+  
+  while ((match = headingRegex.exec(html)) !== null) {
+    const level = parseInt(match[1], 10);
+    const text = match[2]
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, " ")
+      .trim();
+    
+    if (text) {
+      headings.push({ level, text });
+    }
+  }
+  
+  return headings;
+}
+
+// Extract links from HTML
+function extractLinks(html: string): Array<{ text: string; url: string }> {
+  const links: Array<{ text: string; url: string }> = [];
+  const seen = new Set<string>();
+  
+  const linkRegex = /<a[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  
+  while ((match = linkRegex.exec(html)) !== null) {
+    const url = match[1].trim();
+    const text = match[2]
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    
+    // Skip empty URLs, javascript:, mailto:, anchors
+    if (!url || url.startsWith("javascript:") || url.startsWith("mailto:") || url.startsWith("#")) {
+      continue;
+    }
+    
+    // Skip duplicates
+    const key = `${url}|${text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    
+    links.push({ text, url });
+  }
+  
+  return links;
 }
 
 // Simple HTML tag stripper
