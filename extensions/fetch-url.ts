@@ -127,32 +127,43 @@ export default function (pi: ExtensionAPI) {
           }
         }
 
-        // Build response text
-        let responseText = `${getStatusEmoji(response.status)} ${url}${truncated ? " ✂️" : ""}`;
+        // Build response text - compact format
+        let responseText = `${getStatusEmoji(response.status)} ${url}`;
+        if (truncated) responseText += ` ✂️`;
         
-        if (metadata) {
-          responseText += `\n\n📄 ${metadata.title || "No title"}`;
-          if (metadata.description) responseText += `\n📝 ${metadata.description}`;
-          if (metadata.language) responseText += `\n🌐 ${metadata.language}`;
+        // Show metadata prominently
+        if (metadata?.title) {
+          responseText += `\n\n📄 ${metadata.title}`;
+        }
+        if (metadata?.description) {
+          responseText += `\n📝 ${metadata.description.slice(0, 200)}${metadata.description.length > 200 ? '...' : ''}`;
         }
         
+        // Show headings structure (limited)
         if (headings && headings.length > 0) {
-          responseText += `\n\n📑 Structure:\n`;
-          headings.forEach(h => {
-            const indent = "  ".repeat(h.level - 1);
-            responseText += `${indent}├─ H${h.level}: ${h.text}\n`;
+          responseText += `\n\n📑 Structure (${headings.length} headings):\n`;
+          headings.slice(0, 15).forEach(h => {
+            const indent = "  ".repeat(Math.min(h.level - 1, 3));
+            responseText += `${indent}├─ H${h.level}: ${h.text.slice(0, 60)}${h.text.length > 60 ? '...' : ''}\n`;
           });
+          if (headings.length > 15) responseText += `  ... and ${headings.length - 15} more\n`;
         }
         
+        // Show links count and top links
         if (links && links.length > 0) {
-          responseText += `\n\n🔗 Links (${links.length}):\n`;
-          links.slice(0, 20).forEach(l => {
-            responseText += `├─ [${l.text || "link"}] ${l.url}\n`;
+          responseText += `\n\n🔗 ${links.length} links found`;
+          const topLinks = links.slice(0, 10);
+          topLinks.forEach(l => {
+            const displayUrl = l.url.length > 50 ? l.url.slice(0, 47) + '...' : l.url;
+            const displayText = l.text.slice(0, 30) || 'link';
+            responseText += `\n  ├─ [${displayText}] ${displayUrl}`;
           });
-          if (links.length > 20) responseText += `... and ${links.length - 20} more\n`;
         }
         
-        responseText += `\n\n📖 Content:\n${content}`;
+        // Content preview (first 500 chars)
+        const contentPreview = content.slice(0, 500);
+        responseText += `\n\n📖 Content${content.length > 500 ? ' (preview)' : ''}:\n${contentPreview}`;
+        if (content.length > 500) responseText += `\n\n... (${content.length - 500} more characters)`;
 
         return {
           content: [{ type: "text", text: responseText }],
