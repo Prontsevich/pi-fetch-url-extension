@@ -105,8 +105,8 @@ export default function (pi: ExtensionAPI) {
           content = rawText;
         }
 
-        // Truncate if too long (max 50KB for LLM context)
-        const maxLength = 50000;
+        // Truncate if too long (max 5MB for LLM context)
+        const maxLength = 5242880; // 5 * 1024 * 1024
         let truncated = false;
         if (content.length > maxLength) {
           content = content.slice(0, maxLength) + "\n\n... [content truncated, too long]";
