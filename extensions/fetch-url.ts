@@ -127,40 +127,12 @@ export default function (pi: ExtensionAPI) {
           }
         }
 
-        // Build response text - summary only (no content in chat)
+        // Build response text - minimal (status + URL only)
         let responseText = `${getStatusEmoji(response.status)} ${url}`;
         if (truncated) responseText += ` ✂️`;
         
-        // Show metadata prominently
-        if (metadata?.title) {
-          responseText += `\n\n📄 ${metadata.title}`;
-        }
-        if (metadata?.description) {
-          responseText += `\n📝 ${metadata.description.slice(0, 200)}${metadata.description.length > 200 ? '...' : ''}`;
-        }
-        
-        // Show headings structure (limited)
-        if (headings && headings.length > 0) {
-          responseText += `\n\n📑 Structure (${headings.length} headings):\n`;
-          headings.slice(0, 15).forEach(h => {
-            const indent = "  ".repeat(Math.min(h.level - 1, 3));
-            responseText += `${indent}├─ H${h.level}: ${h.text.slice(0, 60)}${h.text.length > 60 ? '...' : ''}\n`;
-          });
-          if (headings.length > 15) responseText += `  ... and ${headings.length - 15} more\n`;
-        }
-        
-        // Show links count and top links
-        if (links && links.length > 0) {
-          responseText += `\n\n🔗 ${links.length} links found`;
-          const topLinks = links.slice(0, 10);
-          topLinks.forEach(l => {
-            const displayUrl = l.url.length > 50 ? l.url.slice(0, 47) + '...' : l.url;
-            const displayText = l.text.slice(0, 30) || 'link';
-            responseText += `\n  ├─ [${displayText}] ${displayUrl}`;
-          });
-        }
-        
-        // No content in chat - it's available in details.fullContent for processing
+        // All data (metadata, headings, links, content) available in details for processing
+        // Nothing else shown in chat
 
         return {
           content: [{ type: "text", text: responseText }],
