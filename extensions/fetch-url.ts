@@ -127,7 +127,7 @@ export default function (pi: ExtensionAPI) {
           }
         }
 
-        // Build response text - compact format
+        // Build response text - summary only (no content in chat)
         let responseText = `${getStatusEmoji(response.status)} ${url}`;
         if (truncated) responseText += ` ✂️`;
         
@@ -160,10 +160,7 @@ export default function (pi: ExtensionAPI) {
           });
         }
         
-        // Content preview (first 500 chars)
-        const contentPreview = content.slice(0, 500);
-        responseText += `\n\n📖 Content${content.length > 500 ? ' (preview)' : ''}:\n${contentPreview}`;
-        if (content.length > 500) responseText += `\n\n... (${content.length - 500} more characters)`;
+        // No content in chat - it's available in details.fullContent for processing
 
         return {
           content: [{ type: "text", text: responseText }],
