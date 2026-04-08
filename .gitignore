@@ -1,13 +1,12 @@
-# Auth & secrets
-auth.json
-*.key
-*.secret
+# Node modules
+node_modules/
 
-# Sessions
-sessions/
-
-# Logs
+# Build artifacts
+dist/
 *.log
 
-# Backup files
-*.backup.*
+# Local config (not part of extension)
+models.json
+settings.json
+auth.json
+sessions/
