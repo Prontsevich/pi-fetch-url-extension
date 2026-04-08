@@ -1,0 +1,13 @@
+# Auth & secrets
+auth.json
+*.key
+*.secret
+
+# Sessions
+sessions/
+
+# Logs
+*.log
+
+# Backup files
+*.backup.*
